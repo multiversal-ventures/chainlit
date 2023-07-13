@@ -155,7 +155,7 @@ async def stop(sid):
             await config.code.on_stop()
 
 
-async def process_message(session: Session, author: str, input_str: str):
+async def process_message(session: Session, message: Message):
     """Process a message from the user."""
 
     try:
@@ -167,13 +167,10 @@ async def process_message(session: Session, author: str, input_str: str):
 
         if session.db_client:
             # If cloud is enabled, persist the message
-            await session.db_client.create_message(
-                {
-                    "author": author,
-                    "content": input_str,
-                    "authorIsUser": True,
-                }
+            message.id = await session.db_client.create_message(
+                message.to_dict() | {"authorIsUser": True}
             )
+            await message.update()
 
         langchain_agent = session.agent
         llama_instance = session.llama_instance
@@ -186,7 +183,7 @@ async def process_message(session: Session, author: str, input_str: str):
                 # If the developer provided a custom run function, use it
                 await config.code.lc_run(
                     langchain_agent,
-                    input_str,
+                    message.content,
                 )
                 return
             else:
@@ -196,7 +193,7 @@ async def process_message(session: Session, author: str, input_str: str):
                     output_key,
                     has_streamed_final_answer,
                 ) = await run_langchain_agent(
-                    langchain_agent, input_str, use_async=config.code.lc_agent_is_async
+                    langchain_agent, message.content, use_async=config.code.lc_agent_is_async
                 )
 
                 if config.code.lc_postprocess:
@@ -217,11 +214,11 @@ async def process_message(session: Session, author: str, input_str: str):
         elif llama_instance:
             from chainlit.llama_index.run import run_llama
 
-            await run_llama(llama_instance, input_str)
+            await run_llama(llama_instance, message.content)
 
         elif config.code.on_message:
             # If no langchain agent is available, call the on_message function provided by the developer
-            await config.code.on_message(input_str)
+            await config.code.on_message(message.content)
     except InterruptedError:
         pass
     except Exception as e:
@@ -242,7 +239,11 @@ async def message(sid, data):
     input_str = data["content"].strip()
     author = data["author"]
 
-    await process_message(session, author, input_str)
+    message = Message(input_str=input_str, author=author)
+    message.temp_id = data["temp_id"]
+    message.created_at = data["created_at"]
+
+    await process_message(session, message)
 
 
 async def process_action(action: Action):
