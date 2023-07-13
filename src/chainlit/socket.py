@@ -172,6 +172,8 @@ async def process_message(session: Session, message: Message):
             )
             await message.update()
 
+        session.last_message = message
+
         langchain_agent = session.agent
         llama_instance = session.llama_instance
 
@@ -193,7 +195,9 @@ async def process_message(session: Session, message: Message):
                     output_key,
                     has_streamed_final_answer,
                 ) = await run_langchain_agent(
-                    langchain_agent, message.content, use_async=config.code.lc_agent_is_async
+                    langchain_agent,
+                    message.content,
+                    use_async=config.code.lc_agent_is_async,
                 )
 
                 if config.code.lc_postprocess:
